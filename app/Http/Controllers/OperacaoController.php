@@ -1,0 +1,182 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Jobs\ImportOperacoesJob;
+use App\Models\Operacao;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+
+class OperacaoController extends Controller
+{
+    /**
+     * @var array<string, array<int, string>>
+     */
+    private const STATUS_TRANSITIONS = [
+        'DIGITANDO' => ['PENDENTE', 'CANCELADA'],
+        'PENDENTE' => ['APROVADA', 'CANCELADA'],
+        'APROVADA' => ['PAGA', 'CANCELADA'],
+        'PAGA' => [],
+        'CANCELADA' => [],
+    ];
+
+    /**
+     * Display a listing of the resource.
+     */
+    public function index(Request $request)
+    {
+        $authUser = Auth::user();
+        $isAdmin = $authUser instanceof User && $authUser->isAdmin();
+        $userId = $authUser instanceof User ? $authUser->id : null;
+        $clienteId = $authUser instanceof User ? $authUser->cliente_id : null;
+
+        $query = Operacao::query()
+            ->select(['id', 'codigo', 'user_id', 'cliente_id', 'conveniada_id', 'valor_desembolso', 'status'])
+            ->with([
+                'cliente:id,nome,cpf',
+                'conveniada:id,nome',
+            ])
+            ->latest('id');
+
+        if (! $isAdmin) {
+            $query->where(function ($q) use ($userId, $clienteId): void {
+                $q->where('user_id', $userId);
+
+                if ($clienteId !== null) {
+                    $q->orWhere('cliente_id', $clienteId);
+                }
+            });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->string('status'));
+        }
+
+        if ($request->filled('codigo')) {
+            $query->where('codigo', 'like', $request->string('codigo').'%');
+        }
+
+        if ($request->filled('cliente')) {
+            $cliente = trim((string) $request->string('cliente'));
+            $onlyNumbers = preg_replace('/\D+/', '', $cliente) ?: '';
+
+            $query->whereHas('cliente', function ($q) use ($cliente, $onlyNumbers): void {
+                if ($onlyNumbers !== '') {
+                    $q->where('cpf', 'like', $onlyNumbers.'%');
+
+                    return;
+                }
+
+                $q->where('nome', 'like', Str::lower($cliente).'%');
+            });
+        }
+
+        $operacoes = $query->simplePaginate(15)->withQueryString();
+        $statuses = collect(['DIGITANDO', 'PENDENTE', 'APROVADA', 'PAGA', 'CANCELADA']);
+
+        return view('operacoes.index', compact('operacoes', 'statuses'));
+    }
+
+    public function show(Operacao $operacao)
+    {
+        $this->authorizeOperacaoAccess($operacao);
+
+        $operacao->load([
+            'cliente',
+            'conveniada',
+            'parcelas',
+            'historicoStatus' => fn ($query) => $query->latest(),
+            'historicoStatus.usuario',
+        ]);
+
+        $nextStatuses = self::STATUS_TRANSITIONS[$operacao->status] ?? [];
+
+        return view('operacoes.show', compact('operacao', 'nextStatuses'));
+    }
+
+    public function import(Request $request)
+    {
+        $authUser = Auth::user();
+        $isAdmin = $authUser instanceof User && $authUser->isAdmin();
+        $userId = $authUser instanceof User ? $authUser->id : null;
+
+        $request->validate([
+            'arquivo' => ['required', 'file', 'mimes:xlsx,xls,csv'],
+        ]);
+
+        $filePath = $request->file('arquivo')->store('imports', 'local');
+
+        ImportOperacoesJob::dispatch($filePath, $userId, $isAdmin);
+
+        return redirect()
+            ->route('operacoes.index')
+            ->with('status', 'Arquivo enviado. A importação foi iniciada em segundo plano e pode levar alguns minutos.');
+    }
+
+    public function updateStatus(Request $request, Operacao $operacao)
+    {
+        $this->authorizeOperacaoAccess($operacao);
+
+        $allowedStatuses = collect(self::STATUS_TRANSITIONS)
+            ->keys()
+            ->flatMap(fn ($status) => [$status, ...(self::STATUS_TRANSITIONS[$status] ?? [])])
+            ->unique()
+            ->values()
+            ->all();
+
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:'.implode(',', $allowedStatuses)],
+        ]);
+
+        $novoStatus = mb_strtoupper($validated['status']);
+        $statusAtual = $operacao->status;
+
+        if ($novoStatus === $statusAtual) {
+            return redirect()
+                ->route('operacoes.show', $operacao)
+                ->with('status', 'A operação já está nesse status.');
+        }
+
+        $allowedNext = self::STATUS_TRANSITIONS[$statusAtual] ?? [];
+
+        if (! in_array($novoStatus, $allowedNext, true)) {
+            return redirect()
+                ->route('operacoes.show', $operacao)
+                ->withErrors(['status' => "Transição inválida: {$statusAtual} -> {$novoStatus}."]);
+        }
+
+        $operacao->update([
+            'status' => $novoStatus,
+            'data_pagamento' => $novoStatus === 'PAGA' ? ($operacao->data_pagamento ?? now()->toDateString()) : $operacao->data_pagamento,
+        ]);
+
+        $operacao->historicoStatus()->create([
+            'status_anterior' => $statusAtual,
+            'status_novo' => $novoStatus,
+            'user_id' => Auth::id(),
+        ]);
+
+        return redirect()
+            ->route('operacoes.show', $operacao)
+            ->with('status', "Status atualizado para {$novoStatus}.");
+    }
+
+    private function authorizeOperacaoAccess(Operacao $operacao): void
+    {
+        $authUser = Auth::user();
+        $isAdmin = $authUser instanceof User && $authUser->isAdmin();
+        $userId = $authUser instanceof User ? $authUser->id : null;
+        $clienteId = $authUser instanceof User ? $authUser->cliente_id : null;
+
+        if ($isAdmin) {
+            return;
+        }
+
+        $hasAccessByOwner = $operacao->user_id === $userId;
+        $hasAccessByCliente = $clienteId !== null && $operacao->cliente_id === $clienteId;
+
+        abort_unless($hasAccessByOwner || $hasAccessByCliente, 403);
+    }
+}

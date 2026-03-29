@@ -2,18 +2,21 @@
 
 namespace App\Jobs;
 
-use App\Imports\OperacoesImport;
+use App\Imports\OperacoesDispatchRowsImport;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
+use Throwable;
 
 class ImportOperacoesJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 0;
+    public int $tries = 1;
+
+    public int $timeout = 1800;
 
     public function __construct(
         public string $filePath,
@@ -26,22 +29,27 @@ class ImportOperacoesJob implements ShouldQueue
     public function handle(): void
     {
         ini_set('memory_limit', '1024M');
-        set_time_limit(0);
+        set_time_limit($this->timeout);
 
-        $import = new OperacoesImport($this->userId, $this->isAdmin);
+        $import = new OperacoesDispatchRowsImport($this->userId, $this->isAdmin, $this->filePath);
 
         Excel::import($import, $this->filePath, 'local');
 
-        Log::info('Importação de operações finalizada', [
+        Log::info('Importação de operações enfileirada por linha', [
             'arquivo' => $this->filePath,
-            'criadas' => $import->created,
-            'atualizadas' => $import->updated,
-            'parcelas' => $import->parcelas,
-            'ignoradas' => $import->skipped,
-            'erros' => $import->errors,
-            'primeiro_erro' => $import->errorMessages[0] ?? null,
+            'linhas_enfileiradas' => $import->dispatched,
         ]);
 
         Storage::disk('local')->delete($this->filePath);
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        Log::error('Falha na importação de operações', [
+            'arquivo' => $this->filePath,
+            'user_id' => $this->userId,
+            'is_admin' => $this->isAdmin,
+            'erro' => $exception->getMessage(),
+        ]);
     }
 }

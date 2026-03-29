@@ -54,13 +54,23 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
             $this->detectedHeaders = array_map('strval', array_keys($rowData->toArray()));
         }
 
+        $this->processArrayRow($rowData->toArray(), $row->getIndex());
+    }
+
+    /**
+     * @param array<string, mixed> $rowData
+     */
+    public function processArrayRow(array $rowData, int $line): void
+    {
+        $row = collect($rowData);
+
         try {
-            $this->importRow($rowData, $row->getIndex());
+            $this->importRow($row, $line);
         } catch (Throwable $e) {
             $this->errors++;
 
             if (count($this->errorMessages) < 20) {
-                $this->errorMessages[] = 'Linha '.$row->getIndex().': '.$e->getMessage();
+                $this->errorMessages[] = 'Linha '.$line.': '.$e->getMessage();
             }
         }
     }
@@ -72,15 +82,9 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
 
     private function importRow($row, int $line): void
     {
-        $codigo = (string) ($this->value($row, ['codigo', 'codigo_operacao', 'operacao_codigo']) ?: '');
         $cpf = User::normalizeCpf((string) ($this->value($row, ['cpf', 'cliente_cpf']) ?: ''));
-        $conveniadaRef = (string) ($this->value($row, ['conveniada_codigo', 'codigo_conveniada', 'conveniada_id']) ?: '');
-
-        if ($codigo === '') {
-            $codigo = 'OP-'.strtoupper(substr(md5(
-                $cpf.'|'.$conveniadaRef.'|'.(string) $this->value($row, ['data_criacao']).'|'.(string) $this->value($row, ['produto']).'|'.(string) $this->value($row, ['valor_desembolso'])
-            ), 0, 16));
-        }
+        $conveniadaRef = trim((string) ($this->value($row, ['conveniada_codigo', 'codigo_conveniada', 'conveniada_id']) ?: ''));
+        $conveniadaNome = trim((string) ($this->value($row, ['conveniada_nome', 'nome_conveniada']) ?: ''));
 
         if ($cpf === '') {
             $this->skipped++;
@@ -88,11 +92,7 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
             return;
         }
 
-        if ($conveniadaRef === '') {
-            $conveniadaRef = 'SEM_CONVENIADA';
-        }
-
-        DB::transaction(function () use ($row, $codigo, $cpf, $conveniadaRef, $line): void {
+        DB::transaction(function () use ($row, $cpf, $conveniadaRef, $conveniadaNome, $line): void {
             $cliente = Cliente::updateOrCreate(
                 ['cpf' => $cpf],
                 [
@@ -105,15 +105,23 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
 
             $conveniada = null;
 
-            if (is_numeric($conveniadaRef)) {
-                $conveniada = Conveniada::find((int) $conveniadaRef);
+            if ($conveniadaRef !== '') {
+                if (is_numeric($conveniadaRef)) {
+                    $conveniada = Conveniada::query()
+                        ->where('id', (int) $conveniadaRef)
+                        ->orWhere('codigo', (string) ((int) $conveniadaRef))
+                        ->first();
+                } else {
+                    $conveniada = Conveniada::query()->where('codigo', $conveniadaRef)->first();
+                }
+            }
+
+            if (! $conveniada && $conveniadaNome !== '') {
+                $conveniada = Conveniada::query()->where('nome', $conveniadaNome)->first();
             }
 
             if (! $conveniada) {
-                $conveniada = Conveniada::updateOrCreate(
-                    ['codigo' => $conveniadaRef],
-                    ['nome' => (string) ($this->value($row, ['conveniada_nome', 'nome_conveniada']) ?: $conveniadaRef)]
-                );
+                throw new \RuntimeException('Conveniada inválida ou não cadastrada. Cadastre as conveniadas fixas (1 a 10) antes da importação.');
             }
 
             $status = $this->normalizeStatus($this->value($row, ['status', 'status_id']));
@@ -136,21 +144,10 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
                 'data_pagamento' => $this->parseDate($this->value($row, ['data_pagamento']), $line),
             ];
 
-            $operacao = Operacao::where('codigo', $codigo)->first();
+            $payload['codigo'] = $this->nextCodigoIncremental();
 
-            if ($operacao) {
-                if (! $this->isAdmin && $operacao->user_id !== $this->userId) {
-                    throw new \RuntimeException('Você não tem permissão para alterar esta operação.');
-                }
-
-                $operacao->update($payload);
-                $this->updated++;
-            } else {
-                $payload['codigo'] = $codigo;
-
-                $operacao = Operacao::create($payload);
-                $this->created++;
-            }
+            $operacao = Operacao::create($payload);
+            $this->created++;
 
             $parcelaNumero = $this->value($row, ['parcela_numero', 'numero_parcela']);
             $parcelaValor = $this->value($row, ['parcela_valor', 'valor_parcela']);
@@ -198,6 +195,47 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
                     $this->parcelas++;
                 }
             }
+        });
+    }
+
+    private function nextCodigoIncremental(): string
+    {
+        return DB::transaction(function (): string {
+            $sequence = DB::table('import_sequences')
+                ->where('chave', 'operacao_codigo')
+                ->lockForUpdate()
+                ->first();
+
+            if (! $sequence) {
+                $maxCodigo = Operacao::query()
+                    ->pluck('codigo')
+                    ->map(fn ($codigo) => trim((string) $codigo))
+                    ->filter(fn ($codigo) => ctype_digit($codigo))
+                    ->map(fn ($codigo) => (int) $codigo)
+                    ->max() ?? 0;
+
+                DB::table('import_sequences')->insert([
+                    'chave' => 'operacao_codigo',
+                    'valor' => $maxCodigo,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $atual = $maxCodigo;
+            } else {
+                $atual = (int) $sequence->valor;
+            }
+
+            $proximo = $atual + 1;
+
+            DB::table('import_sequences')
+                ->where('chave', 'operacao_codigo')
+                ->update([
+                    'valor' => $proximo,
+                    'updated_at' => now(),
+                ]);
+
+            return (string) $proximo;
         });
     }
 

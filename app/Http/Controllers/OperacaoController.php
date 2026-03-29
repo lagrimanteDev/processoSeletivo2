@@ -7,7 +7,6 @@ use App\Models\Operacao;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
 
 class OperacaoController extends Controller
 {
@@ -15,7 +14,7 @@ class OperacaoController extends Controller
      * @var array<string, array<int, string>>
      */
     private const STATUS_TRANSITIONS = [
-        'DIGITANDO' => ['PRÉ-ANÁLISE', 'EM ANÁLISE', 'PARA ASSINATURA', 'ASSINATURA CONCLUÍDA', 'CANCELADA'],
+        'DIGITANDO' => ['PRÉ-ANÁLISE', 'EM ANÁLISE', 'PARA ASSINATURA', 'ASSINATURA CONCLUÍDA', 'APROVADA', 'CANCELADA'],
         'PRÉ-ANÁLISE' => ['DIGITANDO', 'EM ANÁLISE', 'PARA ASSINATURA', 'ASSINATURA CONCLUÍDA', 'APROVADA', 'CANCELADA'],
         'EM ANÁLISE' => ['DIGITANDO', 'PRÉ-ANÁLISE', 'PARA ASSINATURA', 'ASSINATURA CONCLUÍDA', 'APROVADA', 'CANCELADA'],
         'PARA ASSINATURA' => ['DIGITANDO', 'PRÉ-ANÁLISE', 'EM ANÁLISE', 'ASSINATURA CONCLUÍDA', 'APROVADA', 'CANCELADA'],
@@ -61,22 +60,26 @@ class OperacaoController extends Controller
             $query->where('codigo', 'like', $request->string('codigo').'%');
         }
 
-        if ($request->filled('cliente')) {
-            $cliente = trim((string) $request->string('cliente'));
-            $onlyNumbers = preg_replace('/\D+/', '', $cliente) ?: '';
+        if ($request->filled('cliente') || $request->filled('cpf')) {
+            $cliente = trim((string) ($request->filled('cpf') ? $request->string('cpf') : $request->string('cliente')));
 
-            $query->whereHas('cliente', function ($q) use ($cliente, $onlyNumbers): void {
-                if ($onlyNumbers !== '') {
-                    $q->where('cpf', 'like', $onlyNumbers.'%');
+            $cpfAlphaNum = preg_replace('/[^A-Za-z0-9]+/', '', $cliente) ?: '';
+            $clienteUpper = mb_strtoupper($cliente);
+            $cpfAlphaNumUpper = mb_strtoupper($cpfAlphaNum);
 
-                    return;
+            $query->whereHas('cliente', function ($q) use ($cliente, $cpfAlphaNum, $clienteUpper, $cpfAlphaNumUpper): void {
+                $q->where('nome', 'like', $cliente.'%')
+                    ->orWhere('cpf', 'like', $cliente.'%')
+                    ->orWhereRaw('UPPER(cpf) like ?', [$clienteUpper.'%']);
+
+                if ($cpfAlphaNum !== '' && $cpfAlphaNum !== $cliente) {
+                    $q->orWhere('cpf', 'like', $cpfAlphaNum.'%')
+                        ->orWhereRaw('UPPER(cpf) like ?', [$cpfAlphaNumUpper.'%']);
                 }
-
-                $q->where('nome', 'like', Str::lower($cliente).'%');
             });
         }
 
-        $operacoes = $query->simplePaginate(15)->withQueryString();
+        $operacoes = $query->paginate(15)->withQueryString();
         $statuses = collect(array_keys(self::STATUS_TRANSITIONS));
 
         return view('operacoes.index', compact('operacoes', 'statuses'));

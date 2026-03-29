@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Imports;
+
+use App\Jobs\ImportOperacaoLinhaJob;
+use App\Models\ImportacaoLinhaLog;
+use Maatwebsite\Excel\Concerns\OnEachRow;
+use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
+use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Maatwebsite\Excel\Row;
+
+class OperacoesDispatchRowsImport implements OnEachRow, WithHeadingRow, WithChunkReading, SkipsEmptyRows
+{
+    public function __construct(
+        private readonly ?int $userId = null,
+        private readonly bool $isAdmin = false,
+        private readonly ?string $filePath = null,
+    ) {
+    }
+
+    public int $dispatched = 0;
+
+    public function onRow(Row $row): void
+    {
+        $rowData = $row->toArray();
+
+        $log = ImportacaoLinhaLog::create([
+            'arquivo' => $this->filePath,
+            'linha' => $row->getIndex(),
+            'user_id' => $this->userId,
+            'status' => 'queued',
+            'mensagem' => 'Linha enfileirada para processamento.',
+            'row_data' => $rowData,
+        ]);
+
+        ImportOperacaoLinhaJob::dispatch(
+            $rowData,
+            $row->getIndex(),
+            $this->userId,
+            $this->isAdmin,
+            $log->id,
+        );
+
+        $this->dispatched++;
+    }
+
+    public function chunkSize(): int
+    {
+        return 500;
+    }
+}

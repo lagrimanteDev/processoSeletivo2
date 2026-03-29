@@ -66,18 +66,16 @@ class User extends Authenticatable
         return $this->belongsTo(Cliente::class);
     }
 
-    public static function normalizeCpf(string $cpf): string
+    public static function normalizeCpf(string|int|null $cpf): string
     {
-        $cpf = trim($cpf);
+        $cpf = trim((string) $cpf);
 
         if ($cpf === '') {
             return '';
         }
 
-        if (preg_match('/[A-Za-z]/', $cpf) === 1) {
-            return mb_strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $cpf) ?: '');
-        }
+        $normalized = preg_replace('/[^\pL\pN]+/u', '', $cpf) ?: '';
 
-        return preg_replace('/\D+/', '', $cpf) ?: '';
+        return mb_strtoupper($normalized);
     }
 }

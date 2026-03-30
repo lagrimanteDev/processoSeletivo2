@@ -11,6 +11,62 @@ Aplicação Laravel para gestão de operações financeiras, com:
 
 ---
 
+## ⚡ QUICK START (Máquina Nova)
+
+Você está em uma máquina sem o projeto rodando? Execute esses 9 passos em sequência:
+
+```bash
+# 1. Entre na pasta
+cd processoSeletivo
+
+# 2-3. Instale dependências
+composer install
+npm install
+
+# 4-5. Configure o ambiente
+Copy-Item .env.example .env  # Windows
+# OU: cp .env.example .env   # Linux/Mac
+php artisan key:generate
+
+# 6. Configure a sua .env
+
+# Edite .env e configure:
+```dotenv
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=processo_seletivo
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+> ⚠️ **Importante:** Verifique qual porta seu MySQL está usando:
+> - **Instalação padrão:** porta `3306`
+> - **XAMPP:** geralmente porta `3307`
+>
+> Se criou o banco em porta diferente, ajuste `DB_PORT` acima e execute:
+> ```bash
+> mysql -u root -P [PORTA_USADA] -e "CREATE DATABASE processo_seletivo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+> ```
+> Substitua `[PORTA_USADA]` pela porta correta (ex: `3307` para XAMPP).
+
+
+# 7-8. Crie banco e dados
+php artisan migrate
+php artisan db:seed
+
+# 9. Gere assets
+npm run build
+
+# 10. EXECUTE!
+composer run dev
+```
+
+Acesse: `http://127.0.0.1:8000`  
+Login: `test@example.com` / `password`
+
+---
+
 ## 1) Requisitos
 
 Antes de rodar o projeto, garanta que você tem:

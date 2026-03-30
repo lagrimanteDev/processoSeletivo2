@@ -90,8 +90,8 @@ DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_DATABASE=processo_seletivo
-DB_USERNAME=seu_usuario
-DB_PASSWORD=sua_senha
+DB_USERNAME=root
+DB_PASSWORD=
 ```
 
 > Se no seu ambiente o MySQL estiver em outra porta (ex.: 3307), ajuste `DB_PORT`.

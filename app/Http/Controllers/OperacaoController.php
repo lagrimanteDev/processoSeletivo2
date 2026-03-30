@@ -150,9 +150,14 @@ class OperacaoController extends Controller
                 'processed_at' => now(),
             ]);
 
+        // Delete jobs from queue related to this import
+        DB::table('jobs')
+            ->where('payload', 'like', '%'.$latestFile.'%')
+            ->delete();
+
         return redirect()
             ->route('operacoes.index')
-            ->with('status', 'Importação cancelada.');
+            ->with('status', 'Importação cancelada com sucesso.');
     }
 
     private function startQueueWorkerInBackground(string $queueName): void

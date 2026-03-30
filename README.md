@@ -152,7 +152,6 @@ Sem worker ativo, a importação fica em **"carregando"** e os jobs não são pr
 cd C:\Users\Administrador\Desktop\processoSeletivo
 .\workers.bat
 ```
-
 #### Git Bash
 
 ```bash

@@ -123,8 +123,14 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
 
             $produto = (string) ($this->value($row, ['produto']) ?: 'NAO_INFORMADO');
 
-            if (! $conveniada && $produto !== 'NAO_CONSIGNADO') {
-                throw new \RuntimeException('Conveniada inválida ou não cadastrada. Cadastre as conveniadas fixas (1 a 10) antes da importação.');
+            if ($produto !== 'NAO_CONSIGNADO') {
+                if (! $conveniada) {
+                    throw new \RuntimeException(
+                        'Conveniada obrigatória para produto "'.$produto.'". '
+                        .'Conveniada não encontrada com referência "'.$conveniadaRef.'" ou nome "'.$conveniadaNome.'". '
+                        .'Cadastre as conveniadas antes de importar.'
+                    );
+                }
             }
 
             $status = $this->normalizeStatus($this->value($row, ['status', 'status_id']));
@@ -133,7 +139,7 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
 
             $payload = [
                 'cliente_id' => $cliente->id,
-                'conveniada_id' => $conveniada?->id,
+                'conveniada_id' => $produto === 'NAO_CONSIGNADO' ? null : $conveniada->id,
                 'user_id' => $assignedUserId,
                 'valor_requerido' => $this->parseDecimal($this->value($row, ['valor_requerido'])),
                 'valor_desembolso' => $this->parseDecimal($this->value($row, ['valor_desembolso'])),

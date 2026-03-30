@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Validation\ValidationException;
 
 class Operacao extends Model
 {
@@ -61,6 +62,27 @@ class Operacao extends Model
     public function historicoStatus(): HasMany
     {
         return $this->hasMany(HistoricoStatus::class);
+    }
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::saving(function (Operacao $operacao): void {
+            // Se produto = NAO_CONSIGNADO, conveniada_id DEVE ser NULL
+            if ($operacao->produto === 'NAO_CONSIGNADO' && $operacao->conveniada_id !== null) {
+                throw ValidationException::withMessages([
+                    'conveniada_id' => 'Operações com produto NAO_CONSIGNADO não podem ter conveniada atribuída.',
+                ]);
+            }
+
+            // Se produto ≠ NAO_CONSIGNADO, conveniada_id DEVE estar preenchido
+            if ($operacao->produto !== 'NAO_CONSIGNADO' && $operacao->conveniada_id === null) {
+                throw ValidationException::withMessages([
+                    'conveniada_id' => 'Operações com produto "'.$operacao->produto.'" exigem uma conveniada obrigatoriamente.',
+                ]);
+            }
+        });
     }
     //
 }

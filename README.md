@@ -1,582 +1,333 @@
 # Processo Seletivo - Dev I
 
-Aplicação Laravel para gestão de operações financeiras, com:
+Aplicação Laravel para gestão de operações financeiras com importação otimizada de planilhas.
 
-- autenticação de usuários;
-- importação de planilhas (`.xlsx`, `.xls`, `.csv`) em background;
-- listagem, detalhe e atualização de status de operações;
-- histórico de mudança de status;
-- geração de relatório com cálculo de valor presente;
-- filtros avançados por código, cliente, produto, conveniada e status.
+## 🛠️ Tecnologias Utilizadas
+
+| Componente | Tecnologia |
+|-----------|-----------|
+| **Backend** | Laravel 8.2+ (PHP 8.2+) |
+| **Frontend** | Blade Templates + Tailwind CSS + Vite |
+| **Autenticação** | Laravel Breeze |
+| **Banco de Dados** | MySQL 5.7+ ou SQLite |
+| **Queue/Cache** | Database Queue + Database Cache |
+| **Importação** | Maatwebsite/Excel (PhpOffice) |
+| **Build** | npm + Vite.js |
+
+## ✨ Funcionalidades
+
+- ✅ Autenticação de usuários
+- ✅ Importação otimizada em batch
+- ✅ Processamento background com fila em banco (`database`)
+- ✅ Listagem, detalhe e atualização de status de operações
+- ✅ Histórico de mudança de status
+- ✅ Relatório com cálculo de valor presente
+- ✅ Filtros avançados por código, cliente, produto, conveniada e status
+- ✅ Cancelamento de importação em tempo real
 
 ---
 
-## ⚡ QUICK START (Máquina Nova)
+## 📋 Pré-requisitos
 
-Se você está começando do zero, siga este fluxo:
+### Obrigatório
 
-### 1) Entrar na pasta
+- **PHP 8.2+** com extensões: `openssl`, `pdo`, `pdo_mysql` (ou `pdo_sqlite`)
+- **Composer** — [Download](https://getcomposer.org/)
+- **Node.js 18+** e **npm** — [Download](https://nodejs.org/)
+- **Banco de dados:** MySQL 5.7+ **OU** SQLite
+
+### Opcional
+
+- **Git** (para versionamento)
+
+---
+
+## ⚡ Setup Rápido (5 minutos)
+
+### Windows (PowerShell)
+
+```powershell
+cd processoSeletivo
+composer install && npm install
+Copy-Item .env.example .env
+php artisan key:generate
+
+# Criar banco MySQL (XAMPP porta 3307)
+mysql -u root -P 3307 -e "CREATE DATABASE processo_seletivo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# Garantir fila/cache em banco
+php artisan queue:table
+php artisan queue:failed-table
+php artisan cache:table
+php artisan migrate
+php artisan db:seed
+npm run build
+
+composer run dev
+```
+
+### Linux/macOS
 
 ```bash
 cd processoSeletivo
-```
-
-### 2) Instalar dependências
-
-```bash
-composer install
-npm install
-```
-
-### 3) Criar `.env` e gerar chave
-
-Windows (PowerShell):
-
-```powershell
-Copy-Item .env.example .env
-php artisan key:generate
-```
-
-Linux/macOS:
-
-```bash
+composer install && npm install
 cp .env.example .env
 php artisan key:generate
+mysql -u root -e "CREATE DATABASE processo_seletivo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+php artisan queue:table
+php artisan queue:failed-table
+php artisan cache:table
+php artisan migrate && php artisan db:seed && npm run build
+composer run dev
 ```
 
-### 4) Configurar banco no `.env`
+**Acesse:** `http://127.0.0.1:8000`  
+**Login:** `test@example.com` / `password`
+
+---
+
+## 🔧 Configuração de Fila
+
+Este projeto está configurado para usar fila em banco de dados.
+
+Use no `.env`:
 
 ```dotenv
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=processo_seletivo
-DB_USERNAME=root
-DB_PASSWORD=
+QUEUE_CONNECTION=database
+CACHE_STORE=database
+SESSION_DRIVER=database
 ```
 
-> ⚠️ **Importante:** Verifique qual porta seu MySQL está usando:
-> - **Instalação padrão:** porta `3306`
-> - **XAMPP:** geralmente porta `3307`
->
-> Se criou o banco em porta diferente, ajuste `DB_PORT` acima e execute:
-> ```bash
-> mysql -u root -P [PORTA_USADA] -e "CREATE DATABASE processo_seletivo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-> ```
-> Substitua `[PORTA_USADA]` pela porta correta (ex: `3307` para XAMPP).
-
-
-# 7-8. Crie banco e dados
-php artisan migrate
-php artisan db:seed
-```
-
-### 6) Gerar assets
+Depois execute:
 
 ```bash
-npm run build
+php artisan queue:table
+php artisan queue:failed-table
+php artisan cache:table
+php artisan migrate
+php artisan config:clear
 ```
 
-### 7) Subir aplicação
+---
+
+## 📊 Rodar Aplicação
+
+### Comando Único (Recomendado)
 
 ```bash
 composer run dev
 ```
 
-Acesse: `http://127.0.0.1:8000`  
-Login: `test@example.com` / `password`
-
-✅ **Pronto: no final, agora é só importar o arquivo na tela de operações.**
-
----
-
-## 0) Redis (Obrigatório para importações)
-
-**⚠️ Docker Desktop é NECESSÁRIO para rodar esta aplicação com importações.**
-
-Este projeto usa Redis para processar importações de planilhas em background. Redis **só funciona em Docker** (não há versão nativa para Windows).
-
-### Instalar Docker Desktop
-
-1. **Download:** [Docker Desktop para Windows](https://www.docker.com/products/docker-desktop)
-2. **Instale** e reinicie a máquina
-3. **Abra** o Docker Desktop (fica rodando em background)
-
-### Iniciar Redis com Docker
-
-Após Docker Desktop estar rodando, execute **uma única vez**:
-
-```powershell
-docker run -d -p 6379:6379 --name processoSeletivo-redis redis:latest
-```
-
-Verifique se está rodando:
-
-```powershell
-docker ps
-```
-
-Você deve ver `processoSeletivo-redis` na lista.
-
-### Configurar no `.env`
-
-Edite o arquivo `.env`:
-
-```dotenv
-QUEUE_CONNECTION=redis
-CACHE_STORE=redis
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-```
-
-Recarregue a config:
-
-```bash
-php artisan config:cache
-```
-
-**Resultado:** Importação 3-5x mais rápida (~20-30 linhas/segundo).
-
----
-
-## 1) Requisitos
-
-**⚠️ OBRIGATÓRIO: Docker Desktop**
-
-Antes de rodar o projeto, garanta que você tem:
-
-- **Docker Desktop** (obrigatório) — [Download aqui](https://www.docker.com/products/docker-desktop)
-- **PHP 8.2+** com extensões: `openssl`, `pdo`, `pdo_mysql` ou `pdo_sqlite`
-- **Composer** (PHP dependency manager)
-- **Node.js 18+** e **npm**
-- **Banco de dados:** MySQL 5.7+ (recomendado) ou SQLite
-
-> **Observação importante:** 
-> - Docker Desktop **deve estar rodando** antes de iniciar a aplicação
-> - O projeto usa Redis em Docker para fila (`QUEUE_CONNECTION=redis`)
-> - Sessão e cache usam Redis
-> - Se Docker não estiver rodando, nada funciona
-
----
-
-## 2) Passo a passo (primeira execução)
-
-### Passo 1 — entrar na pasta do projeto
-
-```bash
-cd processoSeletivo
-```
-
-### Passo 2 — instalar dependências PHP
-
-```bash
-composer install
-```
-
-### Passo 3 — instalar dependências front-end
-
-```bash
-npm install
-```
-
-### Passo 4 — criar arquivo de ambiente
-
-No Linux/macOS:
-
-```bash
-cp .env.example .env
-```
-
-No Windows (PowerShell):
-
-```powershell
-Copy-Item .env.example .env
-```
-
-### Passo 5 — gerar chave da aplicação
-
-```bash
-php artisan key:generate
-```
-
-### Passo 6 — configurar banco no arquivo `.env`
-
-#### 🟢 Opção A: MySQL (recomendado)
-
-**Edite o arquivo `.env`:**
-
-```dotenv
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=processo_seletivo
-DB_USERNAME=root
-DB_PASSWORD=
-```
-
-**Importante:** Se seu MySQL está em outra porta (ex.: XAMPP usa 3307 por padrão), ajuste `DB_PORT`:
-
-```dotenv
-DB_PORT=3307
-```
-
-**Crie o banco de dados** (se não existir):
-
-```bash
-mysql -u root -P 3306 -e "CREATE DATABASE processo_seletivo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-```
-
-> Se usar porta 3307: `mysql -u root -P 3307 -e "..."`
-
-#### 🔵 Opção B: SQLite (mais rápido para testes)
-
-**Edite o arquivo `.env`:**
-
-```dotenv
-DB_CONNECTION=sqlite
-```
-
-**Crie o arquivo de banco:**
-
-```bash
-php -r "file_exists('database/database.sqlite') || touch('database/database.sqlite');"
-```
-
-### Passo 7 — rodar migrations
-
-```bash
-php artisan migrate
-```
-
-Se houver erro de conexão, valide:
-- O banco está iniciado?
-- As credenciais no `.env` estão corretas?
-- A porta está acessível?
-
-### Passo 8 — popular dados iniciais (recomendado)
-
-```bash
-php artisan db:seed
-```
-
-Isso cria:
-- **conveniadas** padrão (Conveniada 1 a 10)
-- **usuário de teste:** `test@example.com` / senha: `password`
-
-### Passo 9 — gerar assets de produção
-
-```bash
-npm run build
-```
-
-Isso evita erro de `manifest.json` não encontrado.
-
----
-
-## 3) Como rodar o projeto no dia a dia
-
-### ⚠️ ANTES DE COMEÇAR
-
-1. **Docker Desktop deve estar rodando** (clique no ícone na bandeja do sistema)
-2. **Redis precisa estar iniciado:**
-
-```powershell
-docker ps
-```
-
-Se não vir `processoSeletivo-redis`, execute:
-
-```powershell
-docker run -d -p 6379:6379 --name processoSeletivo-redis redis:latest
-```
-
-### ✅ Opção 1 — Comando único (RECOMENDADO)
-
-```bash
-composer run dev
-```
-
-Esse comando sobe automaticamente:
-
-- Servidor Laravel na porta **8000** (`http://127.0.0.1:8000`)
-- Worker da fila em background
+Inicia automaticamente:
+- Servidor Laravel (porta 8000)
+- Worker da fila
 - Logs em tempo real
-- Vite (frontend build) na porta **5174**
-- **Redis** (conexão com Docker)
+- Vite (frontend assets)
 
-**Aguarde ~5 segundos** para o servidor iniciar completamente.
+### Manual (3 Terminais)
 
-### Opção 2 — Manual (3-4 terminais separados)
-
-**Terminal 1 - Servidor Laravel:**
+**Terminal 1:**
 ```bash
 php artisan serve
 ```
 
-**Terminal 2 - Worker da fila:**
+**Terminal 2:**
 ```bash
-php artisan queue:work --queue=default --timeout=0 --tries=1
+php artisan queue:work --tries=1 --timeout=0
 ```
 
-**Terminal 3 - Logs em tempo real:**
-```bash
-php artisan pail
-```
-
-**Terminal 4 - Frontend (opcional, apenas se modificar CSS/JS):**
+**Terminal 3 (opcional):**
 ```bash
 npm run dev
 ```
 
+### 🚨 Worker (Extremamente Importante)
+
+O worker é **extremamente importante** para o funcionamento do projeto.
+Sem worker ativo, a importação fica em **"carregando"** e os jobs não são processados.
+
+#### Windows PowerShell (recomendado)
+
+```powershell
+cd C:\Users\Administrador\Desktop\processoSeletivo
+.\workers.bat
+```
+
+#### Git Bash
+
+```bash
+cd /c/Users/Administrador/Desktop/processoSeletivo
+./workers.bat
+```
+
+> No PowerShell, use `./workers.bat` ou `.\workers.bat` (não apenas `workers.bat`).
+
 ---
 
-## 4) Acesso e rotas principais
+## 📝 Usar a Aplicação
 
-| Descrição | URL |
-|-----------|-----|
-| Login | `GET /login` |
-| Dashboard | `GET /dashboard` |
-| Lista de operações | `GET /operacoes` |
-| Detalhe da operação | `GET /operacoes/{id}` |
-| Importar planilha | `POST /operacoes/importar` |
-| Alterar status | `PATCH /operacoes/{id}/status` |
-| Gerar relatório | `GET /operacoes/relatorio` |
+### Importar Arquivo
 
-**Credenciais de teste:**
-- Email: `test@example.com`
-- Senha: `password`
+1. Acesse `/operacoes`
+2. Escolha arquivo Excel (.xlsx, .xls, .csv)
+3. Clique "Importar"
+4. Acompanhe o progresso
+5. (Opcional) Clique "Cancelar importação"
 
----
+### Colunas Obrigatórias
 
-## 5) Importação de planilha
+- `cpf` ou `cliente_cpf` — CPF do cliente
+- `valor_requerido` — valor solicitado
 
-### Fluxo
+### Colunas Opcionais
 
-1. Acesse: `GET /operacoes`
-2. Escolha um arquivo (`.xlsx`, `.xls` ou `.csv`)
-3. Clique em "Importar"
-4. O sistema processa em background
-5. Acompanhe o progresso na tela
-6. **Cancelar importação** — clique no botão se quiser interromper
-
-### Performance de Importação
-
-| Configuração | Linhas/segundo | Tempo (50k linhas) |
-|---|---|---|
-| Database queue | 7-10 | ~1.5-2 horas |
-| Redis queue | 20-30 | ~30-40 minutos |
-
-**Recomendação:** Use Redis para arquivos > 10.000 linhas.
-
-### Regras de Importação
-
-#### Colunas Obrigatórias
-
-- `cpf` ou `cliente_cpf` ou variações (ex: `documento`)
-- `valor_requerido` (valor solicitado)
-
-#### Colunas Opcionais
-
-- `nome_cliente` / `cliente_nome` — nome do cliente
-- `data_nascimento` — data de nascimento do cliente
+- `nome_cliente` — nome do cliente
 - `email` / `cliente_email` — email
+- `data_nascimento` — data de nascimento
 - `valor_desembolso` — valor desembolsado
 - `total_juros` — total de juros
-- `taxa_juros` / `taxa_juros_%` — taxa em percentual
+- `taxa_juros` — taxa em %
 - `taxa_multa` — taxa de multa
 - `taxa_mora` — taxa de mora
-- `status` / `status_id` — status inicial
+- `status` — status inicial (1=DIGITANDO, 2=PRÉ-ANÁLISE, etc)
 - `data_criacao` — data de criação
 - `data_pagamento` — data de pagamento
-- **`produto`** — tipo de produto (CONSIGNADO, NAO_CONSIGNADO, etc)
-- **`conveniada_id`** ou `codigo_conveniada` — ID ou código da conveniada
-- `quantidade_parcelas` — quantidade de parcelas
-- `data_primeiro_vencimento` — vencimento da primeira parcela
+- `produto` — CONSIGNADO ou NAO_CONSIGNADO
+- `conveniada_id` ou `codigo_conveniada` — código da conveniada
+- `quantidade_parcelas` — qtd de parcelas
+- `data_primeiro_vencimento` — vencimento 1ª parcela
 - `valor_parcela` — valor de cada parcela
 - `quantidade_parcelas_pagas` — parcelas já pagas
 
-#### Regras de Produto e Conveniada
+### Regras Importantes
 
-| Produto | Conveniada | Comportamento |
-|---------|-----------|---|
-| `CONSIGNADO` | Obrigatória | Falha se não encontrada |
-| `NAO_CONSIGNADO` | Pode ser vazia | Importa normalmente, conveniada_id fica NULL |
-| Outros | Obrigatória | Falha se não encontrada |
-
-> **Nota:** O CPF é **sempre preservado** do arquivo original (sem normalização).
+- **CPF preservado** do arquivo (sem normalização)
+- **Mesmo CPF, dados diferentes** = permitido (múltiplas operações)
+- **Linha completa idêntica** = pula (evita duplicata exata)
+- **Produto CONSIGNADO** → conveniada obrigatória
+- **Produto NAO_CONSIGNADO** → conveniada opcional
 
 ---
 
-## 6) Filtros de Busca
+## 🔑 Rotas Principais
 
-Na listagem de operações, você pode filtrar por:
-
-- **Código** — prefixo do código da operação
-- **Cliente** — nome ou CPF do cliente (busca com LIKE)
-- **Produto** — CONSIGNADO ou NAO_CONSIGNADO
-- **Conveniada** — nome da conveniada
-- **Status** — um dos 8 status possíveis
-
-**Comportamento especial:** Se você selecionar `produto = NAO_CONSIGNADO`, o filtro de conveniada é **automaticamente ignorado**, retornando todos os registros com esse produto.
+| Descrição | URL |
+|-----------|-----|
+| Login | `/login` |
+| Dashboard | `/dashboard` |
+| Operações | `/operacoes` |
+| Importar | `POST /operacoes/importar` |
+| Cancelar importação | `POST /operacoes/importar/cancelar` |
+| Detalhe | `/operacoes/{id}` |
+| Alterar status | `PATCH /operacoes/{id}/status` |
+| Relatório | `/operacoes/relatorio` |
 
 ---
 
-## 7) Regras de Status
+## 📊 Status das Operações
 
 | Status | Descrição |
 |--------|-----------|
-| `DIGITANDO` | Digitação/preenchimento em andamento |
+| `DIGITANDO` | Preenchimento em andamento |
 | `PRÉ-ANÁLISE` | Aguardando análise |
 | `EM ANÁLISE` | Sendo analisada |
 | `PARA ASSINATURA` | Pronta para assinatura |
-| `ASSINATURA CONCLUÍDA` | Assinada (pré-requisito para pagamento) |
+| `ASSINATURA CONCLUÍDA` | Assinada ✓ |
 | `APROVADA` | Aprovada |
 | `PAGO AO CLIENTE` | Pagamento realizado |
-| `CANCELADA` | Cancelada (final, não pode ser alterada) |
+| `CANCELADA` | Cancelada (final) |
 
-### Regras de Transição
-
-- Toda alteração de status gera registro em `historico_status`
-- `PAGO AO CLIENTE` só é permitido se:
-  - Status atual for `APROVADA`
-  - A operação já passou por `ASSINATURA CONCLUÍDA` antes
-- Ao marcar como `PAGO AO CLIENTE`, `data_pagamento` é atualizada automaticamente
-- `CANCELADA` não pode ser alterada (status final)
+**Regras:**
+- `PAGO AO CLIENTE` apenas se status = `APROVADA`
+- `CANCELADA` não pode ser alterada
+- Cada mudança gera log em `historico_status`
 
 ---
 
-## 8) Valor Presente (Relatório)
-
-O relatório calcula o **Valor Presente** de cada parcela baseado em:
-
-- **Atraso:** `VP = V + (V × m) + (V × (j/30) × d)`
-- **Adiantamento:** `VP = V - (V × (i/30) × d)`
-
-Onde:
-- `V` = Valor da parcela
-- `m` = Taxa de multa
-- `j` = Taxa de mora (juros)
-- `i` = Taxa da operação
-- `d` = Dias de atraso (negativo = adiantado)
-
----
-
-## 9) Comandos Úteis
+## 🛠️ Comandos Úteis
 
 ```bash
-# Limpar todos os caches
-php artisan optimize:clear
-
-# Ver jobs que falharam
-php artisan queue:failed
-
-# Reprocessar jobs falhados
-php artisan queue:retry all
-
-# Executar testes
-php artisan test
-
-# Ver status das migrations
-php artisan migrate:status
-
-# Reverter última migration
-php artisan migrate:rollback
+php artisan migrate              # Rodar migrations
+php artisan migrate:fresh --seed # Resetar banco + seed
+php artisan queue:failed         # Ver jobs falhados
+php artisan queue:retry all      # Reprocessar falhados
+php artisan optimize:clear       # Limpar caches
+php artisan test                 # Executar testes
 ```
 
 ---
 
-## 10) Troubleshooting (Problemas Comuns)
+## 🐛 Troubleshooting
 
-### ❌ "SQLSTATE[HY000]: General error: 1030 Got error..."
+### Importação não progride
 
-**Causa:** Banco de dados corrompido ou problema de conexão.
-
-**Solução:**
 ```bash
-# No MySQL, reconecte:
+# Verifique worker
+composer run dev
+
+# Veja logs
+tail -f storage/logs/laravel.log
+
+# Reset jobs
+php artisan queue:flush
+php artisan db:seed
+```
+
+### Erro de banco de dados
+
+```bash
 php artisan migrate:refresh --seed
 ```
 
-### ❌ "Module 'openssl' already loaded in php.ini"
+### npm error
 
-**Causa:** OpenSSL carregado duas vezes no `php.ini`.
-
-**Solução:**
-- Abra `php.ini`
-- Procure por `extension=openssl` e `extension=php_openssl.dll`
-- Comente uma delas (adicione `;` no início)
-- Reinicie o servidor
-
-### ❌ "Call to undefined function pcntl_signal (php artisan pail)"
-
-**Causa:** Extensão `pcntl` não disponível no Windows.
-
-**Solução:**
-- A aplicação já tem um workaround: `scripts/pail-or-sleep.php`
-- Use `composer run dev` que funciona automaticamente
-
-### ❌ "Importação não progride (fica em 'processing')"
-
-**Verificação:**
-1. Verifique se há worker rodando: `composer run dev` deve estar ativo
-2. Cheque jobs pendentes: `php artisan queue:failed`
-3. Verifique logs: `storage/logs/laravel.log`
-4. Se houver muitos jobs, limpe e recomeçe:
-   ```bash
-   php artisan queue:flush
-   php artisan db:seed  # Recria dados de teste
-   ```
-
-### ❌ "CORS error ao acessar a aplicação"
-
-**Solução:**
-- Acesse exatamente: `http://127.0.0.1:8000` (não `localhost`)
-- Certifique-se de que `APP_URL=http://localhost` está no `.env`
-
-### ❌ "npm run dev falha com 'EACCES' ou permission denied"
-
-**Solução (Windows):**
 ```bash
-npm install -g npm
 npm cache clean --force
 npm install
 npm run dev
 ```
 
----
+### CORS error
 
-## 11) Resumo Rápido (Checklist)
-
-- [ ] `composer install`
-- [ ] `npm install`
-- [ ] `Copy-Item .env.example .env` (Windows) ou `cp .env.example .env` (Linux/Mac)
-- [ ] `php artisan key:generate`
-- [ ] Editar `.env` com credenciais de banco
-- [ ] `php artisan migrate`
-- [ ] `php artisan db:seed`
-- [ ] `npm run build`
-- [ ] `composer run dev`
-- [ ] Acessar `http://127.0.0.1:8000`
-- [ ] Login com `test@example.com` / `password`
-- [ ] Importar o arquivo na tela de operações (`/operacoes`)
+- Acesse `http://127.0.0.1:8000` (não localhost)
+- Verifique `.env` tem `APP_URL=http://localhost`
 
 ---
 
-## 12) Estrutura de Pastas Principais
+## 📂 Estrutura de Pastas
 
 ```
 app/
-  ├── Http/Controllers/OperacaoController.php  (lógica de listagem e filtros)
-  ├── Imports/OperacoesImport.php             (importação de planilhas)
-  ├── Models/                                  (Operacao, Cliente, Conveniada, etc)
-  └── Jobs/                                    (jobs assíncronos de importação)
+  ├── Http/Controllers/OperacaoController.php   (listagem, filtros, importação)
+  ├── Imports/
+  │   ├── OperacoesImport.php                  (validação e persistência)
+  │   └── OperacoesDispatchRowsImport.php      (batch dispatcher)
+  ├── Jobs/
+  │   ├── ImportOperacoesBatchJob.php          (batch 500 linhas)
+  │   ├── ImportOperacaoLinhaJob.php
+  │   └── ImportOperacoesJob.php
+  └── Models/
 
 resources/views/operacoes/
-  ├── index.blade.php    (listagem com filtros)
-  ├── show.blade.php     (detalhe e histórico)
-  └── edit.blade.php     (alteração de status)
+  ├── index.blade.php    (listagem + importar)
+  ├── show.blade.php     (detalhe + histórico)
+  └── edit.blade.php     (alterar status)
 
 database/
-  ├── migrations/        (schemas das tabelas)
+  ├── migrations/        (schemas)
   └── seeders/           (dados iniciais)
 ```
+
+---
+
+## 📚 Documentação Adicional
+
+- **OTIMIZACOES.md** — Detalhes técnicos do batching v1.1
+- **Laravel Docs** — https://laravel.com/docs
+- **Maatwebsite/Excel** — https://docs.laravel-excel.com/
+
+---
+
+**Data:** 30 de Março de 2026  
+**Versão:** 1.1 (com Batching otimizado)  
+**Status:** Pronto para Deploy ✅

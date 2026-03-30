@@ -350,9 +350,21 @@
 						applyStatusBadge(data);
 						applyCancelButtonState(data);
 						applyErrors(data);
+					})
+					.catch(function () {
+						if (statusBadge) {
+							statusBadge.className = 'inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-red-100 text-red-800';
+							statusBadge.textContent = 'Falha ao carregar status';
+						}
+
+						if (cancelButton) {
+							cancelButton.disabled = true;
+							cancelButton.textContent = 'Cancelar importação';
+						}
 					});
 			}
 
+			updateStats();
 			setInterval(updateStats, 5000);
 		});
 	</script>

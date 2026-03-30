@@ -153,6 +153,13 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
                 'data_pagamento' => $this->parseDate($this->value($row, ['data_pagamento']), $line),
             ];
 
+            // CPF repetido é permitido. Bloqueia apenas importação completamente igual.
+            if ($this->isCompletelyEqualOperacao($payload)) {
+                $this->skipped++;
+
+                return;
+            }
+
             $payload['codigo'] = $this->nextCodigoIncremental();
 
             $operacao = Operacao::create($payload);
@@ -236,8 +243,42 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
     {
         $message = mb_strtolower($e->getMessage());
 
-        return str_contains($message, 'duplicate entry')
-            && str_contains($message, 'clientes_cpf_unique');
+        return (
+            str_contains($message, 'duplicate entry')
+            || str_contains($message, 'already exists')
+            || str_contains($message, 'duplicate key')
+        ) && (
+            str_contains($message, 'clientes_cpf_unique')
+            || (str_contains($message, 'clientes') && str_contains($message, 'cpf'))
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function isCompletelyEqualOperacao(array $payload): bool
+    {
+        $query = Operacao::query()
+            ->where('cliente_id', $payload['cliente_id'])
+            ->where('conveniada_id', $payload['conveniada_id'])
+            ->where('user_id', $payload['user_id'])
+            ->where('valor_requerido', $payload['valor_requerido'])
+            ->where('valor_desembolso', $payload['valor_desembolso'])
+            ->where('total_juros', $payload['total_juros'])
+            ->where('taxa_juros', $payload['taxa_juros'])
+            ->where('taxa_multa', $payload['taxa_multa'])
+            ->where('taxa_mora', $payload['taxa_mora'])
+            ->where('status', $payload['status'])
+            ->where('produto', $payload['produto'])
+            ->whereDate('data_criacao', $payload['data_criacao']);
+
+        if ($payload['data_pagamento'] === null) {
+            $query->whereNull('data_pagamento');
+        } else {
+            $query->whereDate('data_pagamento', $payload['data_pagamento']);
+        }
+
+        return $query->exists();
     }
 
     private function nextCodigoIncremental(): string

@@ -90,16 +90,72 @@ Login: `test@example.com` / `password`
 
 ---
 
+## 0) Redis (Obrigatório para importações)
+
+**⚠️ Docker Desktop é NECESSÁRIO para rodar esta aplicação com importações.**
+
+Este projeto usa Redis para processar importações de planilhas em background. Redis **só funciona em Docker** (não há versão nativa para Windows).
+
+### Instalar Docker Desktop
+
+1. **Download:** [Docker Desktop para Windows](https://www.docker.com/products/docker-desktop)
+2. **Instale** e reinicie a máquina
+3. **Abra** o Docker Desktop (fica rodando em background)
+
+### Iniciar Redis com Docker
+
+Após Docker Desktop estar rodando, execute **uma única vez**:
+
+```powershell
+docker run -d -p 6379:6379 --name processoSeletivo-redis redis:latest
+```
+
+Verifique se está rodando:
+
+```powershell
+docker ps
+```
+
+Você deve ver `processoSeletivo-redis` na lista.
+
+### Configurar no `.env`
+
+Edite o arquivo `.env`:
+
+```dotenv
+QUEUE_CONNECTION=redis
+CACHE_STORE=redis
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+```
+
+Recarregue a config:
+
+```bash
+php artisan config:cache
+```
+
+**Resultado:** Importação 3-5x mais rápida (~20-30 linhas/segundo).
+
+---
+
 ## 1) Requisitos
+
+**⚠️ OBRIGATÓRIO: Docker Desktop**
 
 Antes de rodar o projeto, garanta que você tem:
 
+- **Docker Desktop** (obrigatório) — [Download aqui](https://www.docker.com/products/docker-desktop)
 - **PHP 8.2+** com extensões: `openssl`, `pdo`, `pdo_mysql` ou `pdo_sqlite`
 - **Composer** (PHP dependency manager)
 - **Node.js 18+** e **npm**
 - **Banco de dados:** MySQL 5.7+ (recomendado) ou SQLite
 
-> **Observação importante:** o projeto usa fila em banco (`QUEUE_CONNECTION=database`) e sessão/cache em banco. Por isso, o banco precisa estar disponível e acessível durante toda a execução.
+> **Observação importante:** 
+> - Docker Desktop **deve estar rodando** antes de iniciar a aplicação
+> - O projeto usa Redis em Docker para fila (`QUEUE_CONNECTION=redis`)
+> - Sessão e cache usam Redis
+> - Se Docker não estiver rodando, nada funciona
 
 ---
 
@@ -219,6 +275,21 @@ Isso evita erro de `manifest.json` não encontrado.
 
 ## 3) Como rodar o projeto no dia a dia
 
+### ⚠️ ANTES DE COMEÇAR
+
+1. **Docker Desktop deve estar rodando** (clique no ícone na bandeja do sistema)
+2. **Redis precisa estar iniciado:**
+
+```powershell
+docker ps
+```
+
+Se não vir `processoSeletivo-redis`, execute:
+
+```powershell
+docker run -d -p 6379:6379 --name processoSeletivo-redis redis:latest
+```
+
 ### ✅ Opção 1 — Comando único (RECOMENDADO)
 
 ```bash
@@ -231,6 +302,7 @@ Esse comando sobe automaticamente:
 - Worker da fila em background
 - Logs em tempo real
 - Vite (frontend build) na porta **5174**
+- **Redis** (conexão com Docker)
 
 **Aguarde ~5 segundos** para o servidor iniciar completamente.
 
@@ -285,6 +357,16 @@ npm run dev
 3. Clique em "Importar"
 4. O sistema processa em background
 5. Acompanhe o progresso na tela
+6. **Cancelar importação** — clique no botão se quiser interromper
+
+### Performance de Importação
+
+| Configuração | Linhas/segundo | Tempo (50k linhas) |
+|---|---|---|
+| Database queue | 7-10 | ~1.5-2 horas |
+| Redis queue | 20-30 | ~30-40 minutos |
+
+**Recomendação:** Use Redis para arquivos > 10.000 linhas.
 
 ### Regras de Importação
 

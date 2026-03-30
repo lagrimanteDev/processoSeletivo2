@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\OperacoesRelatorioExport;
 use App\Jobs\ImportOperacoesJob;
+use App\Models\Conveniada;
 use App\Models\ImportacaoLinhaLog;
 use App\Models\Operacao;
 use App\Models\User;
@@ -40,9 +41,10 @@ class OperacaoController extends Controller
 
         $operacoes = $query->paginate(15)->withQueryString();
         $statuses = collect(array_keys(self::STATUS_TRANSITIONS));
+        $conveniadas = Conveniada::query()->orderBy('nome')->get(['id', 'nome']);
         $importStats = $this->buildImportStats();
 
-        return view('operacoes.index', compact('operacoes', 'statuses', 'importStats'));
+        return view('operacoes.index', compact('operacoes', 'statuses', 'conveniadas', 'importStats'));
     }
 
     public function report(Request $request)
@@ -301,6 +303,14 @@ class OperacaoController extends Controller
                     $q->orWhere('cpf', 'like', $cpfAlphaNum.'%');
                 }
             });
+        }
+
+        if ($request->filled('produto')) {
+            $query->where('produto', $request->string('produto'));
+        }
+
+        if ($request->filled('conveniada') && $request->string('produto') !== 'NAO_CONSIGNADO') {
+            $query->where('conveniada_id', $request->integer('conveniada'));
         }
 
         return $query;

@@ -98,35 +98,53 @@
 			</div>
 
 			<div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
-				<form method="GET" action="{{ route('operacoes.index') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-					<div>
-						<label class="block text-sm text-gray-700 mb-1">Código</label>
-						<input type="text" name="codigo" value="{{ request('codigo') }}" class="w-full border-gray-300 rounded-md shadow-sm">
-					</div>
+		<form method="GET" action="{{ route('operacoes.index') }}" class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+			<div>
+				<label class="block text-sm text-gray-700 mb-1">Código</label>
+				<input type="text" name="codigo" value="{{ request('codigo') }}" class="w-full border-gray-300 rounded-md shadow-sm">
+			</div>
 
-					<div>
-						<label class="block text-sm text-gray-700 mb-1">Cliente (nome ou CPF)</label>
-						<input type="text" name="cliente" value="{{ request('cliente') }}" class="w-full border-gray-300 rounded-md shadow-sm">
-					</div>
+			<div>
+				<label class="block text-sm text-gray-700 mb-1">Cliente (nome ou CPF)</label>
+				<input type="text" name="cliente" value="{{ request('cliente') }}" class="w-full border-gray-300 rounded-md shadow-sm">
+			</div>
 
-					<div>
-						<label class="block text-sm text-gray-700 mb-1">Status</label>
-						<select name="status" class="w-full border-gray-300 rounded-md shadow-sm">
-							<option value="">Todos</option>
-							@foreach ($statuses as $status)
-								<option value="{{ $status }}" @selected(request('status') === $status)>{{ $status }}</option>
-							@endforeach
-						</select>
-					</div>
+			<div>
+				<label class="block text-sm text-gray-700 mb-1">Produto</label>
+				<select name="produto" class="w-full border-gray-300 rounded-md shadow-sm">
+					<option value="">Todos</option>
+					<option value="CONSIGNADO" @selected(request('produto') === 'CONSIGNADO')>CONSIGNADO</option>
+					<option value="NAO_CONSIGNADO" @selected(request('produto') === 'NAO_CONSIGNADO')>NAO_CONSIGNADO</option>
+				</select>
+			</div>
 
-					<div class="flex items-end gap-2">
-						<x-primary-button>Filtrar</x-primary-button>
-						<a href="{{ route('operacoes.index') }}" class="inline-flex items-center px-4 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-200">
-							Limpar
-						</a>
-					</div>
-				</form>
+			<div>
+				<label class="block text-sm text-gray-700 mb-1">Conveniada</label>
+				<select name="conveniada" class="w-full border-gray-300 rounded-md shadow-sm">
+					<option value="">Todas</option>
+					@foreach ($conveniadas as $conveniada)
+						<option value="{{ $conveniada->id }}" @selected(request('conveniada') == $conveniada->id)>{{ $conveniada->nome }}</option>
+					@endforeach
+				</select>
+			</div>
 
+			<div>
+				<label class="block text-sm text-gray-700 mb-1">Status</label>
+				<select name="status" class="w-full border-gray-300 rounded-md shadow-sm">
+					<option value="">Todos</option>
+					@foreach ($statuses as $status)
+						<option value="{{ $status }}" @selected(request('status') === $status)>{{ $status }}</option>
+					@endforeach
+				</select>
+			</div>
+
+			<div class="flex items-end gap-2">
+				<x-primary-button>Filtrar</x-primary-button>
+				<a href="{{ route('operacoes.index') }}" class="inline-flex items-center px-4 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-200">
+					Limpar
+				</a>
+			</div>
+		</form>
 				<div class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
 					<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 						<div>

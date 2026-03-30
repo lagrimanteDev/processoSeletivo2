@@ -85,7 +85,7 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
     {
         $cpfRaw = $this->value($row, ['cpf', 'cliente_cpf', 'cpf_cliente', 'cpf_do_cliente', 'documento', 'documento_cliente', 'numero_cpf', 'nr_cpf'])
             ?: $this->valueByKeywords($row, ['cpf']);
-        $cpf = $this->normalizeCpf($cpfRaw);
+        $cpf = trim((string) ($cpfRaw ?: ''));
         $conveniadaRef = trim((string) ($this->value($row, ['conveniada_codigo', 'codigo_conveniada', 'conveniada_id']) ?: ''));
         $conveniadaNome = trim((string) ($this->value($row, ['conveniada_nome', 'nome_conveniada']) ?: ''));
 
@@ -121,7 +121,9 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
                 $conveniada = Conveniada::query()->where('nome', $conveniadaNome)->first();
             }
 
-            if (! $conveniada) {
+            $produto = (string) ($this->value($row, ['produto']) ?: 'NAO_INFORMADO');
+
+            if (! $conveniada && $produto !== 'NAO_CONSIGNADO') {
                 throw new \RuntimeException('Conveniada inválida ou não cadastrada. Cadastre as conveniadas fixas (1 a 10) antes da importação.');
             }
 
@@ -131,7 +133,7 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
 
             $payload = [
                 'cliente_id' => $cliente->id,
-                'conveniada_id' => $conveniada->id,
+                'conveniada_id' => $conveniada?->id,
                 'user_id' => $assignedUserId,
                 'valor_requerido' => $this->parseDecimal($this->value($row, ['valor_requerido'])),
                 'valor_desembolso' => $this->parseDecimal($this->value($row, ['valor_desembolso'])),
@@ -140,7 +142,7 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
                 'taxa_multa' => $this->parseDecimal($this->value($row, ['taxa_multa'])),
                 'taxa_mora' => $this->parseDecimal($this->value($row, ['taxa_mora'])),
                 'status' => $status,
-                'produto' => (string) ($this->value($row, ['produto']) ?: 'NAO_INFORMADO'),
+                'produto' => $produto,
                 'data_criacao' => $this->parseDate($this->value($row, ['data_criacao']), $line) ?? now()->toDateString(),
                 'data_pagamento' => $this->parseDate($this->value($row, ['data_pagamento']), $line),
             ];
@@ -230,23 +232,6 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
 
         return str_contains($message, 'duplicate entry')
             && str_contains($message, 'clientes_cpf_unique');
-    }
-
-    private function normalizeCpf(mixed $value): string
-    {
-        $cpf = trim((string) ($value ?? ''));
-
-        if ($cpf === '') {
-            return '';
-        }
-
-        $onlyDigits = preg_replace('/\D+/', '', $cpf) ?: '';
-
-        if ($onlyDigits !== '') {
-            return $onlyDigits;
-        }
-
-        return $cpf;
     }
 
     private function nextCodigoIncremental(): string

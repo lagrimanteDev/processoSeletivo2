@@ -67,6 +67,23 @@
 					</div>
 				</form>
 
+				<div class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
+					<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+						<div>
+							<h4 class="text-sm font-semibold text-emerald-900">Geração de relatório</h4>
+						</div>
+
+						<div class="flex flex-wrap items-center gap-2">
+							<a href="{{ route('operacoes.report', request()->query()) }}" class="inline-flex items-center px-4 py-2 bg-white  border border-emerald-700 rounded-md text-sm text-gray-700 hover:bg-emerald-700">
+								Gerar relatório (com filtros)
+							</a>
+							<a href="{{ route('operacoes.report') }}" class="inline-flex items-center px-4 py-2  border bg-emerald-600 border-emerald-300 rounded-md text-sm text-emerald-800 hover:bg-emerald-100">
+								Gerar relatório (completo)
+							</a>
+						</div>
+					</div>
+				</div>
+
 				<div class="overflow-x-auto">
 					<table class="min-w-full divide-y divide-gray-200 text-sm">
 						<thead class="bg-gray-50">

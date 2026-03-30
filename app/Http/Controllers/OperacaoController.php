@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\OperacoesRelatorioExport;
 use App\Jobs\ImportOperacoesJob;
 use App\Models\Operacao;
 use App\Models\User;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Maatwebsite\Excel\Facades\Excel;
 
 class OperacaoController extends Controller
 {
@@ -29,60 +33,25 @@ class OperacaoController extends Controller
      */
     public function index(Request $request)
     {
-        $authUser = Auth::user();
-        $isAdmin = $authUser instanceof User && $authUser->isAdmin();
-        $userId = $authUser instanceof User ? $authUser->id : null;
-        $clienteId = $authUser instanceof User ? $authUser->cliente_id : null;
-
-        $query = Operacao::query()
-            ->select(['id', 'codigo', 'user_id', 'cliente_id', 'conveniada_id', 'valor_requerido', 'valor_desembolso', 'status', 'produto'])
-            ->with([
-                'cliente:id,nome,cpf',
-                'conveniada:id,nome',
-            ])
-            ->latest('id');
-
-        if (! $isAdmin) {
-            $query->where(function ($q) use ($userId, $clienteId): void {
-                $q->where('user_id', $userId);
-
-                if ($clienteId !== null) {
-                    $q->orWhere('cliente_id', $clienteId);
-                }
-            });
-        }
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->string('status'));
-        }
-
-        if ($request->filled('codigo')) {
-            $query->where('codigo', 'like', $request->string('codigo').'%');
-        }
-
-        if ($request->filled('cliente') || $request->filled('cpf')) {
-            $cliente = trim((string) ($request->filled('cpf') ? $request->string('cpf') : $request->string('cliente')));
-
-            $cpfAlphaNum = preg_replace('/[^A-Za-z0-9]+/', '', $cliente) ?: '';
-            $clienteUpper = mb_strtoupper($cliente);
-            $cpfAlphaNumUpper = mb_strtoupper($cpfAlphaNum);
-
-            $query->whereHas('cliente', function ($q) use ($cliente, $cpfAlphaNum, $clienteUpper, $cpfAlphaNumUpper): void {
-                $q->where('nome', 'like', $cliente.'%')
-                    ->orWhere('cpf', 'like', $cliente.'%')
-                    ->orWhereRaw('UPPER(cpf) like ?', [$clienteUpper.'%']);
-
-                if ($cpfAlphaNum !== '' && $cpfAlphaNum !== $cliente) {
-                    $q->orWhere('cpf', 'like', $cpfAlphaNum.'%')
-                        ->orWhereRaw('UPPER(cpf) like ?', [$cpfAlphaNumUpper.'%']);
-                }
-            });
-        }
+        $query = $this->buildOperacoesListQuery($request);
 
         $operacoes = $query->paginate(15)->withQueryString();
         $statuses = collect(array_keys(self::STATUS_TRANSITIONS));
 
         return view('operacoes.index', compact('operacoes', 'statuses'));
+    }
+
+    public function report(Request $request)
+    {
+        $exportDate = CarbonImmutable::now();
+
+        $operacoes = $this->buildOperacoesListQuery($request)
+            ->orderBy('id')
+            ->get();
+
+        $fileName = 'relatorio-operacoes-'.$exportDate->format('Ymd-His').'.xlsx';
+
+        return Excel::download(new OperacoesRelatorioExport($operacoes, $exportDate), $fileName);
     }
 
     public function show(Operacao $operacao)
@@ -186,5 +155,72 @@ class OperacaoController extends Controller
         $hasAccessByCliente = $clienteId !== null && $operacao->cliente_id === $clienteId;
 
         abort_unless($hasAccessByOwner || $hasAccessByCliente, 403);
+    }
+
+    private function buildOperacoesListQuery(Request $request): Builder
+    {
+        $authUser = Auth::user();
+        $isAdmin = $authUser instanceof User && $authUser->isAdmin();
+        $userId = $authUser instanceof User ? $authUser->id : null;
+        $clienteId = $authUser instanceof User ? $authUser->cliente_id : null;
+
+        $query = Operacao::query()
+            ->select([
+                'id',
+                'codigo',
+                'user_id',
+                'cliente_id',
+                'conveniada_id',
+                'valor_requerido',
+                'valor_desembolso',
+                'taxa_juros',
+                'data_pagamento',
+                'status',
+                'produto',
+            ])
+            ->with([
+                'cliente:id,nome,cpf',
+                'conveniada:id,nome',
+            ])
+            ->latest('id');
+
+        if (! $isAdmin) {
+            $query->where(function ($q) use ($userId, $clienteId): void {
+                $q->where('user_id', $userId);
+
+                if ($clienteId !== null) {
+                    $q->orWhere('cliente_id', $clienteId);
+                }
+            });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->string('status'));
+        }
+
+        if ($request->filled('codigo')) {
+            $query->where('codigo', 'like', $request->string('codigo').'%');
+        }
+
+        if ($request->filled('cliente') || $request->filled('cpf')) {
+            $cliente = trim((string) ($request->filled('cpf') ? $request->string('cpf') : $request->string('cliente')));
+
+            $cpfAlphaNum = preg_replace('/[^A-Za-z0-9]+/', '', $cliente) ?: '';
+            $clienteUpper = mb_strtoupper($cliente);
+            $cpfAlphaNumUpper = mb_strtoupper($cpfAlphaNum);
+
+            $query->whereHas('cliente', function ($q) use ($cliente, $cpfAlphaNum, $clienteUpper, $cpfAlphaNumUpper): void {
+                $q->where('nome', 'like', $cliente.'%')
+                    ->orWhere('cpf', 'like', $cliente.'%')
+                    ->orWhereRaw('UPPER(cpf) like ?', [$clienteUpper.'%']);
+
+                if ($cpfAlphaNum !== '' && $cpfAlphaNum !== $cliente) {
+                    $q->orWhere('cpf', 'like', $cpfAlphaNum.'%')
+                        ->orWhereRaw('UPPER(cpf) like ?', [$cpfAlphaNumUpper.'%']);
+                }
+            });
+        }
+
+        return $query;
     }
 }

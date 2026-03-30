@@ -82,14 +82,15 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
 
     private function importRow($row, int $line): void
     {
-        $cpf = User::normalizeCpf((string) ($this->value($row, ['cpf', 'cliente_cpf']) ?: ''));
+        $cpfRaw = $this->value($row, ['cpf', 'cliente_cpf', 'cpf_cliente', 'cpf_do_cliente', 'documento', 'documento_cliente', 'numero_cpf', 'nr_cpf'])
+            ?: $this->valueByKeywords($row, ['cpf']);
+        $cpf = trim((string) ($cpfRaw ?: ''));
         $conveniadaRef = trim((string) ($this->value($row, ['conveniada_codigo', 'codigo_conveniada', 'conveniada_id']) ?: ''));
         $conveniadaNome = trim((string) ($this->value($row, ['conveniada_nome', 'nome_conveniada']) ?: ''));
 
         if ($cpf === '') {
             $this->skipped++;
-
-            return;
+            throw new \RuntimeException('CPF não informado ou coluna de CPF não reconhecida no arquivo.');
         }
 
         DB::transaction(function () use ($row, $cpf, $conveniadaRef, $conveniadaNome, $line): void {
@@ -250,6 +251,28 @@ class OperacoesImport implements OnEachRow, WithHeadingRow, WithChunkReading, Sk
 
             if ($value !== null && $value !== '') {
                 return $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<int, string> $keywords
+     */
+    private function valueByKeywords($row, array $keywords): mixed
+    {
+        foreach ($row->toArray() as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $normalizedKey = Str::slug((string) $key, '_');
+
+            foreach ($keywords as $keyword) {
+                if (str_contains($normalizedKey, Str::slug($keyword, '_'))) {
+                    return $value;
+                }
             }
         }
 

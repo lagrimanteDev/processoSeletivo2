@@ -94,6 +94,7 @@ Use no `.env`:
 
 ```dotenv
 QUEUE_CONNECTION=database
+DB_QUEUE_RETRY_AFTER=3600
 CACHE_STORE=database
 SESSION_DRIVER=database
 ```
@@ -160,6 +161,8 @@ cd /c/Users/Administrador/Desktop/processoSeletivo
 ```
 
 > No PowerShell, use `./workers.bat` ou `.\workers.bat` (não apenas `workers.bat`).
+>
+> Recomendado para importações grandes: manter `DB_QUEUE_RETRY_AFTER=3600` no `.env` para evitar erro de "attempted too many times".
 
 ---
 
